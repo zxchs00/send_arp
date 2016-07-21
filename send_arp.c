@@ -124,15 +124,37 @@ int main(int argc, char* argv[]){
 	int chk, cnt;
 	int snaplen = 100;
 	char ebuf[PCAP_ERRBUF_SIZE];
-	//struct pcap_pkthdr *header;
+
 	u_char arp_data[42];
 	u_char req_data[42];
 	u_char targetip[4];
+
+	struct pcap_pkthdr *header;
+	const u_char *pkt_data;
+	int res;
 
 	if(argc != 2){
 		printf("Please give target ip address!\n");
 		return 0;
 	}
+
+	// type (ARP = 0x0806)
+	arp_data[12]=0x08;
+	arp_data[13]=0x06;
+	// Ethernet = 0x0001
+	arp_data[14]=0x00;
+	arp_data[15]=0x01;
+	// IP = 0x0800
+	arp_data[16]=0x08;
+	arp_data[17]=0x00;
+	// MAC length (06)
+	arp_data[18]=0x06;
+	// IP length (04)
+	arp_data[19]=0x04;
+	// ARP type ( reply = 0x0002 )
+	arp_data[20]=0x00;
+	arp_data[21]=0x02;
+
 	chk = 0;
 	cnt = 0;
 	for(i=0;i<strlen(argv[1]);i++){
@@ -188,13 +210,52 @@ int main(int argc, char* argv[]){
 	if(make_request(req_data, targetip) == 0){
 		printf("Error : Making Request \n");
 	}
-/*
-	for(i=0;i<42;i++)
-		printf("%02x ", req_data[i]);
-	printf("\n");
-*/
-	
-	
+
+	if(pcap_sendpacket(pd,req_data,42) != 0){
+		printf("Error : Sending request packet!\n");
+	}
+
+	while((res = pcap_next_ex( pd, &header, &pkt_data)) >= 0){
+		if(res == 0)
+		/* Timeout elapsed */
+			continue;
+		
+		// type check
+		if( ntohs(*((unsigned short*)(&pkt_data[12]))) != 0x0806 ){
+			// it's not ARP
+			continue;
+		}
+		else{ // It's ARP !
+			if( ntohs(*((unsigned short*)(&pkt_data[20]))) == 0x0002 ){
+				if( ((unsigned int*)(&pkt_data[28]))[0] == ((unsigned int*)(&req_data[38]))[0] ){
+					/*
+					printf("     Target's Mac   ");
+					printf("%02x",pkt_data[6]);
+					for(i=7;i<12;i++){
+						printf(":");
+						printf("%02x", pkt_data[i]);
+					}
+					printf("\n");
+					*/
+					for(i=0;i<6;i++){
+						arp_data[i] = pkt_data[6+i];
+						arp_data[32+i] = pkt_data[6+i];
+					}
+					break;
+				}
+			}
+		}
+	}
+	if(res == -1){
+		printf("Error reading the packets: %s\n", pcap_geterr(pd));
+		return -1;
+	}
+
+	if(pcap_sendpacket(pd,arp_data,42) != 0){
+		printf("Error : Sending request packet!\n");
+	}
+
+
 /*
 	printf("gateway IP : ");
 	for(i=0;i<4;i++)
