@@ -49,7 +49,7 @@ int eth0_IP(unsigned char* ipadd){
 int gatewayIP(unsigned char* ipadd){
 	FILE *f;
 	char line[100], *p, *c, *g, *saveptr;
-	int nRet = 1;
+	int nRet = 0;
 	int tmp;
 	int i;
 	f = fopen("/proc/net/route","r");
@@ -70,7 +70,7 @@ int gatewayIP(unsigned char* ipadd){
 					//printf("%d\n",(g[2*i]-0x30)*16+(g[2*i+1]-0x30));
 				}
 				if(g){
-					nRet = 0;
+					nRet = 1;
 				}
 				break;
 			}
@@ -78,6 +78,42 @@ int gatewayIP(unsigned char* ipadd){
 	}
 	fclose(f);
 	return nRet;
+}
+
+int make_request(u_char* pdata, u_char* tip){
+	int i;
+
+	for(i=0;i<6;i++)
+		pdata[i] = 0xFF;
+	if(eth0_MAC(&pdata[6]) == 0){
+		printf("Error : Writing my MAC! \n");
+		return 0;
+	}
+	pdata[12] = 0x08;
+	pdata[13] = 0x06;
+	pdata[14] = 0x00;
+	pdata[15] = 0x01;
+	pdata[16] = 0x08;
+	pdata[17] = 0x00;
+	pdata[18] = 0x06;
+	pdata[19] = 0x04;
+	pdata[20] = 0x00;
+	pdata[21] = 0x01; // request
+	if(eth0_MAC(&pdata[22]) == 0){
+		printf("Error : Writing my MAC! \n");
+		return 0;
+	}
+	if(eth0_IP(&pdata[28]) == 0){
+		printf("Error : Writing my IP! \n");
+		return 0;
+	}
+	for(i=0;i<6;i++)
+		pdata[32+i] = 0x00;
+	for(i=0;i<4;i++)
+		pdata[38+i] = tip[i];
+
+	return 1;
+
 }
 
 int main(int argc, char* argv[]){
@@ -88,10 +124,10 @@ int main(int argc, char* argv[]){
 	int chk, cnt;
 	int snaplen = 100;
 	char ebuf[PCAP_ERRBUF_SIZE];
-	unsigned char s_mac[6];
-	unsigned char d_mac[6];
 	//struct pcap_pkthdr *header;
 	u_char arp_data[42];
+	u_char req_data[42];
+	u_char targetip[4];
 
 	if(argc != 2){
 		printf("Please give target ip address!\n");
@@ -101,7 +137,7 @@ int main(int argc, char* argv[]){
 	cnt = 0;
 	for(i=0;i<strlen(argv[1]);i++){
 		if(argv[1][i] == '.'){
-			arp_data[38 + cnt] = chk;
+			targetip[cnt] = chk;
 			chk = 0;
 			cnt++;
 		}
@@ -109,7 +145,11 @@ int main(int argc, char* argv[]){
 			chk = chk*10 + argv[1][i] -0x30;
 		}
 	}
-	arp_data[38 + cnt] = chk;
+	targetip[cnt] = chk;
+
+	for(i=0;i<4;i++){
+		arp_data[38+i] = targetip[i];
+	}
 
 	if(device == NULL){
 		if( (device = pcap_lookupdev(ebuf)) == NULL){
@@ -123,12 +163,13 @@ int main(int argc, char* argv[]){
 		exit(-1);
 	}
 
-	if(eth0_MAC(&arp_data[6]) == 1){
-		printf("source mac : ");
-		for(i=0;i<6;i++)
-			printf("%02x:",arp_data[6+i]);
-		printf("\n");
+	if(eth0_MAC(&arp_data[6]) == 0){
+		printf("Error : Writing my MAC address at packet ! \n");
 	}
+	if(eth0_MAC(&arp_data[22]) == 0){
+		printf("Error : Writing my MAC address at packet ! \n");
+	}
+	/*
 	if(eth0_IP(&arp_data[28]) == 1){
 		printf("my IP : ");
 		for(i=0;i<4;i++)
@@ -138,9 +179,23 @@ int main(int argc, char* argv[]){
 	else{
 		printf("error\n");
 	}
+	*/
 
-	i = gatewayIP(&arp_data[28]);
+	if(gatewayIP(&arp_data[28]) == 0){
+		printf("Error : Can't read gateway address! \n");
+	}
 
+	if(make_request(req_data, targetip) == 0){
+		printf("Error : Making Request \n");
+	}
+/*
+	for(i=0;i<42;i++)
+		printf("%02x ", req_data[i]);
+	printf("\n");
+*/
+	
+	
+/*
 	printf("gateway IP : ");
 	for(i=0;i<4;i++)
 		printf("%d.",arp_data[28+i]);
@@ -151,11 +206,9 @@ int main(int argc, char* argv[]){
 	for(i=0;i<4;i++)
 		printf("%d.",arp_data[38+i]);
 	printf("\n");
-
-	
+*/
 
 /*
-
 	// destination MAC
 	// memcpy(d_mac,packetadressadress,6)
 	arp_data[0]=
@@ -211,7 +264,6 @@ int main(int argc, char* argv[]){
 	arp_data[39]=
 	arp_data[40]=
 	arp_data[41]=
-
 */
 
 	return 0;
