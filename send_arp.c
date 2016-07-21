@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <errno.h>
+
 #include <net/if.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
@@ -44,12 +46,46 @@ int eth0_IP(unsigned char* ipadd){
 	return 1;
 }
 
+int gatewayIP(unsigned char* ipadd){
+	FILE *f;
+	char line[100], *p, *c, *g, *saveptr;
+	int nRet = 1;
+	int tmp;
+	int i;
+	f = fopen("/proc/net/route","r");
+
+	while(fgets(line, 100, f)){
+		p = strtok_r(line, " \t",&saveptr);
+		c = strtok_r(NULL, " \t",&saveptr);
+		g = strtok_r(NULL, " \t",&saveptr);
+		if(p!=NULL && c!=NULL){
+			if(strcmp(c,"00000000") == 0){
+				//printf("Default gateway IP is : %s \n",g);
+				for(i=0;i<8;i++){
+					if(g[i] >= 'A')
+						g[i] -= 7;
+				}
+				for(i=0;i<4;i++){
+					ipadd[3-i] = (g[2*i]-0x30)*16+(g[2*i+1]-0x30);
+					//printf("%d\n",(g[2*i]-0x30)*16+(g[2*i+1]-0x30));
+				}
+				if(g){
+					nRet = 0;
+				}
+				break;
+			}
+		}
+	}
+	fclose(f);
+	return nRet;
+}
+
 int main(int argc, char* argv[]){
 	char* device = NULL;// = "eth0";
 	pcap_t* pd;
 	int i;
 	u_char ippp;
-	int chk;
+	int chk, cnt;
 	int snaplen = 100;
 	char ebuf[PCAP_ERRBUF_SIZE];
 	unsigned char s_mac[6];
@@ -62,17 +98,18 @@ int main(int argc, char* argv[]){
 		return 0;
 	}
 	chk = 0;
+	cnt = 0;
 	for(i=0;i<strlen(argv[1]);i++){
 		if(argv[1][i] == '.'){
-			printf("%d\n",chk);
+			arp_data[38 + cnt] = chk;
 			chk = 0;
+			cnt++;
 		}
 		else{
 			chk = chk*10 + argv[1][i] -0x30;
 		}
 	}
-	printf("%d",chk);
-	printf("\n");
+	arp_data[38 + cnt] = chk;
 
 	if(device == NULL){
 		if( (device = pcap_lookupdev(ebuf)) == NULL){
@@ -101,6 +138,22 @@ int main(int argc, char* argv[]){
 	else{
 		printf("error\n");
 	}
+
+	i = gatewayIP(&arp_data[28]);
+
+	printf("gateway IP : ");
+	for(i=0;i<4;i++)
+		printf("%d.",arp_data[28+i]);
+	printf("\n");
+
+
+	printf("target IP : ");
+	for(i=0;i<4;i++)
+		printf("%d.",arp_data[38+i]);
+	printf("\n");
+
+	
+
 /*
 
 	// destination MAC
