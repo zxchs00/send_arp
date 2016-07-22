@@ -34,14 +34,20 @@ int eth0_IP(unsigned char* ipadd){
 	struct ifreq ifr;
 	int sock = 0;
 	int i;
+	//struct sockaddr_in* sai;
+
 	sock = socket(AF_INET, SOCK_DGRAM, 0);
 	if(sock == 0){
 		printf("socket error!\n");
 		return 0;
 	}
 	strcpy(ifr.ifr_name, "eth0");
-	if(ioctl(sock,SIOCGIFADDR, &ifr) == 0)
-		memcpy(ipadd, &ifr.ifr_addr.sa_data[2], 4);
+	if(ioctl(sock,SIOCGIFADDR, &ifr) == 0){
+		//sai = &ifr.ifru.ifru_addr;
+		//memcpy(ipadd, sai->sin_addr, 4);
+		//printf("%d",ifr.ifr_ifindex);
+		memcpy(ipadd, &ifr.ifr_addr.sa_data[ifr.ifr_ifindex], 4);
+	}
 	// trash in sa_data[0~1] - why? T.T
 	return 1;
 }
