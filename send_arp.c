@@ -34,7 +34,7 @@ int eth0_IP(unsigned char* ipadd){
 	struct ifreq ifr;
 	int sock = 0;
 	int i;
-	//struct sockaddr_in* sai;
+	struct sockaddr_in* sai = (struct sockaddr_in*)sizeof(struct sockaddr_in);
 
 	sock = socket(AF_INET, SOCK_DGRAM, 0);
 	if(sock == 0){
@@ -43,10 +43,11 @@ int eth0_IP(unsigned char* ipadd){
 	}
 	strcpy(ifr.ifr_name, "eth0");
 	if(ioctl(sock,SIOCGIFADDR, &ifr) == 0){
-		//sai = &ifr.ifru.ifru_addr;
-		//memcpy(ipadd, sai->sin_addr, 4);
+		sai = &ifr.ifr_ifru.ifru_addr;
+		memcpy(ipadd, &(sai->sin_addr.s_addr), 4);
+		//for(i=0;i<4;i++) printf("%d.",ipadd[i]);
 		//printf("%d",ifr.ifr_ifindex);
-		memcpy(ipadd, &ifr.ifr_addr.sa_data[ifr.ifr_ifindex], 4);
+		//memcpy(ipadd, &ifr.ifr_addr.sa_data[ifr.ifr_ifindex], 4);
 	}
 	// trash in sa_data[0~1] - why? T.T
 	return 1;
